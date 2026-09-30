@@ -163,3 +163,62 @@ def test_receipt_is_visible_to_event_sink_in_log_order():
         assert delivered[receipt_index].actor == "receipt-researcher"
     finally:
         runtime.close_sinks(timeout=2.0)
+
+
+def test_same_request_with_changed_external_results_has_different_fingerprint():
+    def run(results):
+        graph = Graph()
+
+        def researcher(event, behavior_graph, ctx):
+            emit_external_context_receipt(
+                behavior_graph,
+                provider="fixture-memory",
+                resource="memory-index:test",
+                request={"query": "same query", "limit": 2},
+                results=results,
+            )
+
+        Runtime(
+            graph,
+            behaviors=[
+                Behavior(
+                    name="drift-check",
+                    fn=researcher,
+                    on=["goal.created"],
+                )
+            ],
+        ).run_goal("check external drift")
+        return _receipt(graph.events).payload
+
+    first = run([{"id": "memory:1", "version": 1}])
+    changed = run([{"id": "memory:1", "version": 2}])
+
+    assert first["request_sha256"] == changed["request_sha256"]
+    assert first["results_sha256"] != changed["results_sha256"]
+
+
+def test_provider_failure_emits_behavior_failure_without_false_success_receipt():
+    graph = Graph()
+
+    def researcher(event, behavior_graph, ctx):
+        raise RuntimeError("fixture provider unavailable")
+
+    Runtime(
+        graph,
+        behaviors=[
+            Behavior(
+                name="failing-provider",
+                fn=researcher,
+                on=["goal.created"],
+            )
+        ],
+    ).run_goal("exercise provider failure")
+
+    types = [event.type for event in graph.events]
+    assert "behavior.failed" in types
+    assert "external_context.read" not in types
+    assert "object.created" not in types
+
+    failure = next(event for event in graph.events if event.type == "behavior.failed")
+    assert failure.payload["behavior"] == "failing-provider"
+    assert failure.payload["exception_type"] == "RuntimeError"
