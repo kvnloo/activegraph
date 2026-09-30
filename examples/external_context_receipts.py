@@ -15,12 +15,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from typing import Any, Protocol
 
-from activegraph import Graph
+from activegraph import Graph, Runtime
+from activegraph.behaviors.base import Behavior
 
 
 EVENT_TYPE = "external_context.read"
+
+
+class EventEmitter(Protocol):
+    def emit(self, event_type: str, payload: dict[str, Any]): ...
 
 
 def canonical_sha256(value: Any) -> str:
@@ -35,7 +40,7 @@ def canonical_sha256(value: Any) -> str:
 
 
 def emit_external_context_receipt(
-    graph: Graph,
+    graph: EventEmitter,
     *,
     provider: str,
     resource: str,
@@ -58,38 +63,51 @@ def emit_external_context_receipt(
 def demo() -> Graph:
     graph = Graph()
 
-    request = {"query": "what did we decide about replay integrity?", "limit": 2}
-    retrieved = [
-        {
-            "id": "memory:decision-17",
-            "text": "private fixture text that must not enter the event payload",
-            "score": 0.93,
-        },
-        {
-            "id": "memory:decision-23",
-            "text": "another private fixture",
-            "score": 0.88,
-        },
-    ]
+    def researcher(event, behavior_graph, ctx):
+        request = {"query": "what did we decide about replay integrity?", "limit": 2}
+        retrieved = [
+            {
+                "id": "memory:decision-17",
+                "text": "private fixture text that must not enter the event payload",
+                "score": 0.93,
+            },
+            {
+                "id": "memory:decision-23",
+                "text": "another private fixture",
+                "score": 0.88,
+            },
+        ]
 
-    emit_external_context_receipt(
+        emit_external_context_receipt(
+            behavior_graph,
+            provider="example-memory",
+            resource="memory-index:v1",
+            request=request,
+            results=retrieved,
+        )
+
+        # The following mutation shares the same triggering event as the
+        # receipt, so the log can show that external context preceded work
+        # derived during this behavior execution.
+        behavior_graph.add_object(
+            "claim",
+            {
+                "text": "Replay integrity was an explicit prior decision.",
+                "evidence": ["external-context-receipt"],
+            },
+        )
+
+    runtime = Runtime(
         graph,
-        provider="example-memory",
-        resource="memory-index:v1",
-        request=request,
-        results=retrieved,
+        behaviors=[
+            Behavior(
+                name="external-context-example",
+                fn=researcher,
+                on=["goal.created"],
+            )
+        ],
     )
-
-    # A later event may be derived from that context. The receipt preceding it
-    # makes the dependency visible without copying the retrieved content into
-    # the ActiveGraph log.
-    graph.add_object(
-        "claim",
-        {
-            "text": "Replay integrity was an explicit prior decision.",
-            "evidence": ["external-context-receipt"],
-        },
-    )
+    runtime.run_goal("demonstrate external context provenance")
     return graph
 
 
