@@ -25,30 +25,39 @@ def test_canonical_digest_is_key_order_independent():
     assert canonical_sha256(left) == canonical_sha256(right)
 
 
-def test_receipt_precedes_derived_mutation_and_contains_no_retrieved_content():
+def test_receipt_is_causally_tied_to_behavior_and_precedes_derived_mutation():
     graph = demo()
     events = graph.events
 
-    assert [event.type for event in events] == [
-        "external_context.read",
-        "object.created",
-    ]
+    goal = next(event for event in events if event.type == "goal.created")
+    receipt = next(event for event in events if event.type == "external_context.read")
+    created = next(event for event in events if event.type == "object.created")
 
-    receipt = events[0].payload
-    assert receipt["provider"] == "example-memory"
-    assert receipt["resource"] == "memory-index:v1"
-    assert receipt["count"] == 2
-    assert len(receipt["request_sha256"]) == 64
-    assert len(receipt["results_sha256"]) == 64
+    assert events.index(receipt) < events.index(created)
+    assert receipt.actor == "external-context-example"
+    assert receipt.caused_by == goal.id
+    assert created.actor == receipt.actor
+    assert created.caused_by == receipt.caused_by
 
-    serialized = json.dumps(receipt, sort_keys=True)
+    payload = receipt.payload
+    assert payload["provider"] == "example-memory"
+    assert payload["resource"] == "memory-index:v1"
+    assert payload["count"] == 2
+    assert len(payload["request_sha256"]) == 64
+    assert len(payload["results_sha256"]) == 64
+
+    serialized = json.dumps(payload, sort_keys=True)
     assert "private fixture text" not in serialized
     assert "another private fixture" not in serialized
     assert "what did we decide" not in serialized
 
 
 def test_same_external_read_produces_same_receipt_digest():
-    first = demo().events[0].payload
-    second = demo().events[0].payload
+    first = next(
+        event for event in demo().events if event.type == "external_context.read"
+    ).payload
+    second = next(
+        event for event in demo().events if event.type == "external_context.read"
+    ).payload
     assert first["request_sha256"] == second["request_sha256"]
     assert first["results_sha256"] == second["results_sha256"]
