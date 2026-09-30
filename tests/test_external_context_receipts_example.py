@@ -30,7 +30,7 @@ def test_receipt_precedes_derived_mutation_and_contains_no_retrieved_content():
     events = graph.events
 
     assert [event.type for event in events] == [
-        "context.external_read",
+        "external_context.read",
         "object.created",
     ]
 
