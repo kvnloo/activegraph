@@ -20,7 +20,7 @@ from typing import Any
 from activegraph import Graph
 
 
-EVENT_TYPE = "context.external_read"
+EVENT_TYPE = "external_context.read"
 
 
 def canonical_sha256(value: Any) -> str:
