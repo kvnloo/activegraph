@@ -1,0 +1,57 @@
+version: 1
+repo: kvnloo/activegraph
+id: activegraph
+kind: suite
+summary: Event-sourced reactive graph runtime used by z0archy as its temporal architecture-history substrate.
+
+architecture:
+  subsystems:
+    - id: graph-runtime
+      name: Reactive graph runtime
+      kind: runtime
+      summary: Owns graph objects, typed relations, reactive behaviors, subscriptions, and bounded runtime execution.
+      paths: [activegraph/]
+    - id: event-store
+      name: Event-sourced persistence
+      kind: history
+      summary: Persists append-only graph mutations so runs are auditable, resumable, replayable, and structurally comparable.
+      paths: [activegraph/, docs/]
+      depends_on: [graph-runtime]
+    - id: fork-diff
+      name: Fork and diff
+      kind: history
+      summary: Forks prior run state, reuses shared-prefix replay, and computes structural differences between counterfactual graph worlds.
+      paths: [activegraph/, tests/]
+      depends_on: [event-store]
+    - id: behavior-system
+      name: Behavior system
+      kind: execution
+      summary: Hosts function, class, LLM-backed, and relation-attached behaviors reacting to graph changes.
+      paths: [activegraph/]
+      depends_on: [graph-runtime]
+    - id: packs
+      name: Pack system
+      kind: extension
+      summary: Bundles domain object types, behaviors, tools, prompts, and policies into reusable runtime packages.
+      paths: [activegraph/packs/]
+      depends_on: [graph-runtime]
+    - id: event-export
+      name: Event export
+      kind: observability
+      summary: Streams accepted live events through isolated bounded sinks without blocking runtime mutation processing.
+      paths: [activegraph/, tests/]
+      depends_on: [event-store]
+
+  provides_interfaces: []
+  consumes_interfaces: []
+  produces_representations: []
+  consumes_representations: []
+
+  boundaries:
+    owns: [event-sourced graph runtime, behavior execution, replay/fork/diff semantics, graph persistence]
+    not_here: [Zer0 canonical architecture authority, z0archy semantic identities, repository ownership semantics]
+
+  evidence:
+    docs: [README.md, CONTRACT.md, docs/, compaction-design.md]
+    tests: [tests/]
+    schemas: []
